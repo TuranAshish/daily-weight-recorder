@@ -1,0 +1,4 @@
+# pnpm 11+ blocks dependency install scripts unless reviewed.
+# This project only allows the known resolver used by the Next/ESLint toolchain.
+allowBuilds:
+  unrs-resolver: true
