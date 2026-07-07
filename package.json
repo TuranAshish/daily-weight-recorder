@@ -18,7 +18,8 @@
     "react-dom": "^18.3.1",
     "recharts": "^2.15.0",
     "tailwind-merge": "^2.6.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "@supabase/supabase-js": "^2.48.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

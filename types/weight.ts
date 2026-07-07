@@ -4,4 +4,5 @@ export type WeightEntry = {
   weight: number;
   note?: string;
   createdAt: string;
+  updatedAt?: string;
 };

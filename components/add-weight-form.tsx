@@ -55,8 +55,8 @@ export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: A
       return;
     }
 
-    if (!weight || Number.isNaN(parsedWeight) || parsedWeight < 20 || parsedWeight > 350) {
-      setError("Enter a valid weight between 20 kg and 350 kg.");
+    if (!weight || Number.isNaN(parsedWeight) || parsedWeight < 1 || parsedWeight > 1000) {
+      setError("Enter a valid weight between 1 kg and 1000 kg.");
       return;
     }
 
@@ -83,7 +83,7 @@ export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: A
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle>{editingEntry ? "Edit weight record" : "Add daily weight"}</CardTitle>
-            <CardDescription>Record your weight in kilograms. Everything stays private in this browser.</CardDescription>
+            <CardDescription>Record your weight in kilograms. You can choose past, present, or future dates.</CardDescription>
           </div>
           <div className="rounded-2xl bg-accent p-3 text-accent-foreground">
             <CalendarDays className="h-5 w-5" />
@@ -95,7 +95,7 @@ export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: A
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="date">Date</Label>
-              <Input id="date" type="date" value={date} max={todayISO()} onChange={(event) => setDate(event.target.value)} />
+              <Input id="date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="weight">Weight in kg</Label>
@@ -104,8 +104,8 @@ export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: A
                 inputMode="decimal"
                 type="number"
                 step="0.1"
-                min="20"
-                max="350"
+                min="1"
+                max="1000"
                 placeholder="Example: 83.5"
                 value={weight}
                 onChange={(event) => setWeight(event.target.value)}

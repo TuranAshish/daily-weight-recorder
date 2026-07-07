@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, CheckCircle2, Database, LineChart, LockKeyhole, Scale, Sparkles, Trophy } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, CheckCircle2, Cloud, Database, LineChart, Scale, Sparkles, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AddWeightForm } from "@/components/add-weight-form";
 import { Badge } from "@/components/ui/badge";
@@ -9,23 +9,55 @@ import { ProgressChart } from "@/components/progress-chart";
 import { HistoryTable } from "@/components/history-table";
 import { StatCard } from "@/components/stat-card";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SyncPanel } from "@/components/sync-panel";
+import { fetchCloudWeightEntries, deleteCloudWeightEntry, mergeEntries, uploadEntriesToCloud, upsertCloudWeightEntry } from "@/lib/cloud-storage";
+import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import { loadWeightEntries, saveWeightEntries } from "@/lib/storage";
 import { formatChange, formatKg } from "@/lib/utils";
 import type { WeightEntry } from "@/types/weight";
+import type { User } from "@supabase/supabase-js";
 
 export function WeightApp() {
   const [entries, setEntries] = useState<WeightEntry[]>([]);
   const [editingEntry, setEditingEntry] = useState<WeightEntry | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [syncConfigured, setSyncConfigured] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("Local mode: records are saved only on this device until cloud sync is configured and you sign in.");
 
   useEffect(() => {
     setEntries(loadWeightEntries());
     setHydrated(true);
+
+    const configured = isSupabaseConfigured();
+    setSyncConfigured(configured);
+
+    if (!configured) return;
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => data.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (hydrated) saveWeightEntries(entries);
   }, [entries, hydrated]);
+
+  useEffect(() => {
+    if (!user || !hydrated) return;
+    void syncWithCloud();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, hydrated]);
 
   const sortedAsc = useMemo(() => [...entries].sort((a, b) => a.date.localeCompare(b.date)), [entries]);
   const latest = sortedAsc.at(-1) ?? null;
@@ -35,21 +67,101 @@ export function WeightApp() {
   const change = latest && first ? Number((latest.weight - first.weight).toFixed(1)) : 0;
   const average = entries.length ? entries.reduce((sum, entry) => sum + entry.weight, 0) / entries.length : null;
 
+  async function syncWithCloud() {
+    if (!user) return;
+
+    try {
+      setSyncing(true);
+      setSyncStatus("Syncing your local and cloud records…");
+      const localEntries = loadWeightEntries();
+      const cloudEntries = await fetchCloudWeightEntries(user.id);
+      const merged = mergeEntries(localEntries, cloudEntries);
+      await uploadEntriesToCloud(merged, user.id);
+      setEntries(merged);
+      saveWeightEntries(merged);
+      setSyncStatus(`Synced ${merged.length} record${merged.length === 1 ? "" : "s"} to your account.`);
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : "Cloud sync failed. Please check Supabase setup.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function handleSignIn(email: string, password: string) {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    try {
+      setSyncing(true);
+      setSyncStatus("Signing in…");
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      setSyncStatus("Signed in. Sync will start automatically.");
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : "Could not sign in.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function handleSignUp(email: string, password: string) {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    try {
+      setSyncing(true);
+      setSyncStatus("Creating your account…");
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      setSyncStatus("Account created. Check your email if Supabase asks for confirmation, then sign in.");
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : "Could not create account.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function handleSignOut() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    await supabase.auth.signOut();
+    setUser(null);
+    setSyncStatus("Signed out. Records saved on this device will stay local.");
+  }
+
   function handleSave(entry: Omit<WeightEntry, "createdAt"> & { createdAt?: string }) {
+    const now = new Date().toISOString();
+    const nextEntry: WeightEntry = {
+      ...entry,
+      createdAt: entry.createdAt ?? now,
+      updatedAt: now
+    };
+
     setEntries((current) => {
-      const nextEntry: WeightEntry = {
-        ...entry,
-        createdAt: entry.createdAt ?? new Date().toISOString()
-      };
       const exists = current.some((item) => item.id === nextEntry.id);
       const updated = exists ? current.map((item) => (item.id === nextEntry.id ? nextEntry : item)) : [...current, nextEntry];
       return updated.sort((a, b) => a.date.localeCompare(b.date));
     });
+
+    if (user) {
+      setSyncStatus("Saving to cloud…");
+      void upsertCloudWeightEntry(nextEntry, user.id)
+        .then(() => setSyncStatus("Saved and synced to your account."))
+        .catch((error: unknown) => setSyncStatus(error instanceof Error ? error.message : "Could not sync this record."));
+    }
   }
 
   function handleDelete(id: string) {
     setEntries((current) => current.filter((entry) => entry.id !== id));
     if (editingEntry?.id === id) setEditingEntry(null);
+
+    if (user) {
+      setSyncStatus("Deleting from cloud…");
+      void deleteCloudWeightEntry(id)
+        .then(() => setSyncStatus("Deleted from this device and your account."))
+        .catch((error: unknown) => setSyncStatus(error instanceof Error ? error.message : "Could not delete this record from cloud."));
+    }
   }
 
   function handleEdit(entry: WeightEntry) {
@@ -90,13 +202,13 @@ export function WeightApp() {
           <div className="animate-fadeUp">
             <Badge className="mb-5 gap-2 border-primary/20 bg-primary/10 text-primary">
               <Sparkles className="h-3.5 w-3.5" />
-              Private, ad-free, browser-based tracker
+              Private, ad-free tracker with optional cloud sync
             </Badge>
             <h1 className="max-w-4xl text-4xl font-black tracking-tight sm:text-5xl lg:text-7xl">
               Record your weight daily and see your progress clearly.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Daily Weight Recorder helps you save kilogram-based entries, view trends, edit history, and stay consistent without needing an account or backend.
+              Daily Weight Recorder helps you save kilogram-based entries, view trends, edit history, and sync securely across devices when Supabase cloud sync is connected.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg">
@@ -108,7 +220,7 @@ export function WeightApp() {
             </div>
             <div className="mt-8 grid gap-3 text-sm font-medium text-muted-foreground sm:grid-cols-3">
               <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> No ads</div>
-              <div className="flex items-center gap-2"><LockKeyhole className="h-4 w-4 text-primary" /> Local storage</div>
+              <div className="flex items-center gap-2"><Cloud className="h-4 w-4 text-primary" /> Cloud sync ready</div>
               <div className="flex items-center gap-2"><LineChart className="h-4 w-4 text-primary" /> Progress chart</div>
             </div>
           </div>
@@ -146,7 +258,7 @@ export function WeightApp() {
                 <div className="space-y-3 text-sm text-muted-foreground">
                   <div className="flex justify-between"><span>Average weight</span><strong className="text-foreground">{formatKg(average)}</strong></div>
                   <div className="flex justify-between"><span>Highest record</span><strong className="text-foreground">{formatKg(highest)}</strong></div>
-                  <div className="flex justify-between"><span>Saved locally</span><strong className="text-foreground">Yes</strong></div>
+                  <div className="flex justify-between"><span>Sync mode</span><strong className="text-foreground">{user ? "Cloud" : "Local"}</strong></div>
                 </div>
               </div>
             </div>
@@ -170,6 +282,19 @@ export function WeightApp() {
         </div>
       </section>
 
+      <section className="section-shell py-8">
+        <SyncPanel
+          configured={syncConfigured}
+          userEmail={user?.email ?? null}
+          status={syncStatus}
+          syncing={syncing}
+          onSignIn={handleSignIn}
+          onSignUp={handleSignUp}
+          onSignOut={handleSignOut}
+          onSyncNow={syncWithCloud}
+        />
+      </section>
+
       <section className="section-shell grid gap-6 py-8 lg:grid-cols-[0.85fr_1.15fr]">
         <AddWeightForm entries={entries} editingEntry={editingEntry} onSave={handleSave} onCancelEdit={() => setEditingEntry(null)} />
         <ProgressChart entries={entries} />
@@ -184,7 +309,7 @@ export function WeightApp() {
           <p>© {new Date().getFullYear()} Daily Weight Recorder. Built for private daily tracking.</p>
           <div className="flex items-center gap-2">
             <Database className="h-4 w-4" />
-            <span>No backend. No ads. Data saved in your browser.</span>
+            <span>No ads. Local-first with optional Supabase cloud sync.</span>
           </div>
         </div>
       </footer>
