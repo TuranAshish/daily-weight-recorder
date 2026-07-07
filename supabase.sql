@@ -8,8 +8,7 @@ create table if not exists public.weight_entries (
   weight_kg numeric(6, 1) not null check (weight_kg >= 1 and weight_kg <= 1000),
   note text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (user_id, date)
+  updated_at timestamptz not null default now()
 );
 
 alter table public.weight_entries enable row level security;
@@ -43,3 +42,12 @@ on public.weight_entries
 for delete
 to authenticated
 using (auth.uid() = user_id);
+
+
+-- Migration for older versions of this app:
+-- Run this if your existing table was created with one record per date.
+alter table public.weight_entries
+  drop constraint if exists weight_entries_user_id_date_key;
+
+create index if not exists weight_entries_user_date_created_idx
+  on public.weight_entries (user_id, date, created_at);

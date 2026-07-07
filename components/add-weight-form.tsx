@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { CalendarDays, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,13 +13,12 @@ function todayISO() {
 }
 
 type AddWeightFormProps = {
-  entries: WeightEntry[];
   editingEntry: WeightEntry | null;
   onSave: (entry: Omit<WeightEntry, "createdAt"> & { createdAt?: string }) => void;
   onCancelEdit: () => void;
 };
 
-export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: AddWeightFormProps) {
+export function AddWeightForm({ editingEntry, onSave, onCancelEdit }: AddWeightFormProps) {
   const [date, setDate] = useState(todayISO());
   const [weight, setWeight] = useState("");
   const [note, setNote] = useState("");
@@ -34,10 +33,6 @@ export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: A
     }
   }, [editingEntry]);
 
-  const existingSameDate = useMemo(
-    () => entries.find((entry) => entry.date === date && entry.id !== editingEntry?.id),
-    [date, editingEntry?.id, entries]
-  );
 
   function resetForm() {
     setDate(todayISO());
@@ -60,10 +55,6 @@ export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: A
       return;
     }
 
-    if (existingSameDate) {
-      setError("A record already exists for this date. Edit that record from history.");
-      return;
-    }
 
     onSave({
       id: editingEntry?.id ?? crypto.randomUUID(),
@@ -83,7 +74,7 @@ export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: A
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle>{editingEntry ? "Edit weight record" : "Add daily weight"}</CardTitle>
-            <CardDescription>Record your weight in kilograms. You can choose past, present, or future dates.</CardDescription>
+            <CardDescription>Record one or many weight checks for the same date in kilograms.</CardDescription>
           </div>
           <div className="rounded-2xl bg-accent p-3 text-accent-foreground">
             <CalendarDays className="h-5 w-5" />
@@ -116,7 +107,7 @@ export function AddWeightForm({ entries, editingEntry, onSave, onCancelEdit }: A
             <Label htmlFor="note">Note optional</Label>
             <Input
               id="note"
-              placeholder="Example: after morning walk, fasting weight"
+              placeholder="Example: morning, evening, after walk"
               value={note}
               maxLength={80}
               onChange={(event) => setNote(event.target.value)}

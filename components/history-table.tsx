@@ -15,6 +15,16 @@ type HistoryTableProps = {
   onDelete: (id: string) => void;
 };
 
+function entryTime(entry: WeightEntry) {
+  return new Date(entry.createdAt || entry.updatedAt || 0).getTime();
+}
+
+function timeLabel(entry: WeightEntry) {
+  const value = entry.createdAt || entry.updatedAt;
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
 export function HistoryTable({ entries, onEdit, onDelete }: HistoryTableProps) {
   const [query, setQuery] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -22,7 +32,7 @@ export function HistoryTable({ entries, onEdit, onDelete }: HistoryTableProps) {
 
   const filteredEntries = useMemo(() => {
     return [...entries]
-      .sort((a, b) => b.date.localeCompare(a.date))
+      .sort((a, b) => b.date.localeCompare(a.date) || entryTime(b) - entryTime(a))
       .filter((entry) => {
         const matchesSearch =
           !query ||
@@ -41,7 +51,7 @@ export function HistoryTable({ entries, onEdit, onDelete }: HistoryTableProps) {
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
             <CardTitle>History</CardTitle>
-            <CardDescription>Search, filter, edit, or delete your previous daily records.</CardDescription>
+            <CardDescription>Search, filter, edit, or delete your records. Multiple entries on the same date are allowed.</CardDescription>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 lg:w-[620px]">
             <div className="relative sm:col-span-1">
@@ -75,6 +85,7 @@ export function HistoryTable({ entries, onEdit, onDelete }: HistoryTableProps) {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">Date</p>
                     <p className="font-semibold">{dateLabel(entry.date)}</p>
+                    <p className="text-xs text-muted-foreground">Added {timeLabel(entry)}</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">Weight</p>

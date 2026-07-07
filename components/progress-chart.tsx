@@ -11,12 +11,23 @@ type ProgressChartProps = {
   entries: WeightEntry[];
 };
 
+function entryTime(entry: WeightEntry) {
+  return new Date(entry.createdAt || entry.updatedAt || 0).getTime();
+}
+
+function createdTimeLabel(entry: WeightEntry) {
+  const value = entry.createdAt || entry.updatedAt;
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
 export function ProgressChart({ entries }: ProgressChartProps) {
   const chartData = [...entries]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((entry) => ({
+    .sort((a, b) => a.date.localeCompare(b.date) || entryTime(a) - entryTime(b))
+    .map((entry, index) => ({
+      xKey: `${entry.date}-${entry.id}-${index}`,
       date: entry.date,
-      label: dateLabel(entry.date),
+      label: `${dateLabel(entry.date)}${createdTimeLabel(entry) ? ` • ${createdTimeLabel(entry)}` : ""}`,
       weight: entry.weight
     }));
 
@@ -30,7 +41,7 @@ export function ProgressChart({ entries }: ProgressChartProps) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle>Weight progress</CardTitle>
-            <CardDescription>Track daily movement and long-term direction.</CardDescription>
+            <CardDescription>Track every saved weight check, including multiple entries on the same date.</CardDescription>
           </div>
           <div className="rounded-2xl bg-accent p-3 text-accent-foreground">
             <TrendingUp className="h-5 w-5" />
@@ -52,8 +63,11 @@ export function ProgressChart({ entries }: ProgressChartProps) {
                 </defs>
                 <CartesianGrid strokeDasharray="4 4" vertical={false} />
                 <XAxis
-                  dataKey="date"
-                  tickFormatter={(value) => new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(new Date(`${value}T00:00:00`))}
+                  dataKey="xKey"
+                  tickFormatter={(_value, index) => {
+                    const item = chartData[index];
+                    return item ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(new Date(`${item.date}T00:00:00`)) : "";
+                  }}
                   tickLine={false}
                   axisLine={false}
                   minTickGap={24}

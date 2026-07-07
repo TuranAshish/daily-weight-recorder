@@ -112,3 +112,20 @@ alter table public.weight_entries
 alter table public.weight_entries
   add constraint weight_entries_weight_kg_check check (weight_kg >= 1 and weight_kg <= 1000);
 ```
+
+
+## Multiple weights on one date
+
+This version supports many weight records on the same date. This is useful for morning/evening checks or repeated measurements.
+
+If you already created the Supabase table with an older version, run this migration in Supabase SQL Editor:
+
+```sql
+alter table public.weight_entries
+  drop constraint if exists weight_entries_user_id_date_key;
+
+create index if not exists weight_entries_user_date_created_idx
+  on public.weight_entries (user_id, date, created_at);
+```
+
+After this, the same signed-in user can save unlimited entries for the same date.

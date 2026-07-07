@@ -17,6 +17,16 @@ import { formatChange, formatKg } from "@/lib/utils";
 import type { WeightEntry } from "@/types/weight";
 import type { User } from "@supabase/supabase-js";
 
+function entryCreatedTime(entry: WeightEntry) {
+  return new Date(entry.createdAt || entry.updatedAt || 0).getTime();
+}
+
+function sortEntriesByDateAndTime(a: WeightEntry, b: WeightEntry) {
+  const dateCompare = a.date.localeCompare(b.date);
+  if (dateCompare !== 0) return dateCompare;
+  return entryCreatedTime(a) - entryCreatedTime(b);
+}
+
 export function WeightApp() {
   const [entries, setEntries] = useState<WeightEntry[]>([]);
   const [editingEntry, setEditingEntry] = useState<WeightEntry | null>(null);
@@ -59,7 +69,7 @@ export function WeightApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, hydrated]);
 
-  const sortedAsc = useMemo(() => [...entries].sort((a, b) => a.date.localeCompare(b.date)), [entries]);
+  const sortedAsc = useMemo(() => [...entries].sort(sortEntriesByDateAndTime), [entries]);
   const latest = sortedAsc.at(-1) ?? null;
   const first = sortedAsc.at(0) ?? null;
   const highest = entries.length ? Math.max(...entries.map((entry) => entry.weight)) : null;
@@ -141,7 +151,7 @@ export function WeightApp() {
     setEntries((current) => {
       const exists = current.some((item) => item.id === nextEntry.id);
       const updated = exists ? current.map((item) => (item.id === nextEntry.id ? nextEntry : item)) : [...current, nextEntry];
-      return updated.sort((a, b) => a.date.localeCompare(b.date));
+      return updated.sort(sortEntriesByDateAndTime);
     });
 
     if (user) {
@@ -296,7 +306,7 @@ export function WeightApp() {
       </section>
 
       <section className="section-shell grid gap-6 py-8 lg:grid-cols-[0.85fr_1.15fr]">
-        <AddWeightForm entries={entries} editingEntry={editingEntry} onSave={handleSave} onCancelEdit={() => setEditingEntry(null)} />
+        <AddWeightForm editingEntry={editingEntry} onSave={handleSave} onCancelEdit={() => setEditingEntry(null)} />
         <ProgressChart entries={entries} />
       </section>
 

@@ -34,21 +34,31 @@ function toDbEntry(entry: WeightEntry, userId: string) {
   };
 }
 
+function entryTime(entry: WeightEntry) {
+  return new Date(entry.createdAt || entry.updatedAt || 0).getTime();
+}
+
 function newerOf(a: WeightEntry, b: WeightEntry) {
   const aTime = new Date(a.updatedAt ?? a.createdAt).getTime();
   const bTime = new Date(b.updatedAt ?? b.createdAt).getTime();
   return bTime >= aTime ? b : a;
 }
 
+function sortByDateAndTime(a: WeightEntry, b: WeightEntry) {
+  const dateCompare = a.date.localeCompare(b.date);
+  if (dateCompare !== 0) return dateCompare;
+  return entryTime(a) - entryTime(b);
+}
+
 export function mergeEntries(localEntries: WeightEntry[], cloudEntries: WeightEntry[]) {
-  const byDate = new Map<string, WeightEntry>();
+  const byId = new Map<string, WeightEntry>();
 
   [...localEntries, ...cloudEntries].forEach((entry) => {
-    const existing = byDate.get(entry.date);
-    byDate.set(entry.date, existing ? newerOf(existing, entry) : entry);
+    const existing = byId.get(entry.id);
+    byId.set(entry.id, existing ? newerOf(existing, entry) : entry);
   });
 
-  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  return Array.from(byId.values()).sort(sortByDateAndTime);
 }
 
 export async function fetchCloudWeightEntries(userId: string) {
@@ -59,7 +69,8 @@ export async function fetchCloudWeightEntries(userId: string) {
     .from("weight_entries")
     .select("id,user_id,date,weight_kg,note,created_at,updated_at")
     .eq("user_id", userId)
-    .order("date", { ascending: true });
+    .order("date", { ascending: true })
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
   return ((data ?? []) as DbWeightEntry[]).map(toAppEntry);
